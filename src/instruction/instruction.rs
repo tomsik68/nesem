@@ -3,26 +3,26 @@ use super::operand::Operand;
 
 pub struct Instruction {
     ty: InstructionType,
-    operand: Option<Operand>,
+    operand: Operand,
 }
 
 impl Instruction {
     pub fn without_operand(ty: InstructionType) -> Instruction {
-        Instruction { ty, operand: None }
-    }
-
-    pub fn with_operand(ty: InstructionType, op: Operand) -> Instruction {
         Instruction {
             ty,
-            operand: Some(op),
+            operand: Operand::Implicit,
         }
+    }
+
+    pub fn with_operand(ty: InstructionType, operand: Operand) -> Instruction {
+        Instruction { ty, operand }
     }
 
     pub fn get_type(&self) -> InstructionType {
         self.ty
     }
 
-    pub fn get_operand(&self) -> &Option<Operand> {
+    pub fn get_operand(&self) -> &Operand {
         &self.operand
     }
 }
