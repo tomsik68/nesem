@@ -17,41 +17,32 @@ fn lda(state: &mut State, op: &Operand) {
 /// For the 's' variant: branch happens if @flag is set
 /// For the 'c' variant: branch happens if @flag is clear
 macro_rules! branch_inst {
-    ($name:ident, $flag:ident, s) => {
+    ($name:ident, $pred:expr) => {
         fn $name(state: &mut State, op: &Operand) {
             let dest = match op {
                 Operand::Relative(rel) => state.pc.wrapping_add((*rel as i16) as u16),
                 _ => unimplemented!("{}: operand is not Relative(i8)", stringify!($name)),
             };
 
-            if state.get_$flag() {
-                state.pc = dest;
-            }
-        }
-    };
-
-    ($name:ident, $flag:ident, c) => {
-        fn $name(state: &mut State, op: &Operand) {
-            let dest = match op {
-                Operand::Relative(rel) => state.pc.wrapping_add((*rel as i16) as u16),
-                _ => unimplemented!("{}: operand is not Relative(i8)", stringify!($name)),
-            };
-
-            if !state.get_$flag() {
+            if $pred(&state) {
                 state.pc = dest;
             }
         }
     };
 }
 
-branch_inst!(bcc, get_carry, c);
-branch_inst!(bcs, get_carry, s);
-branch_inst!(beq, get_zero, s);
-branch_inst!(bne, get_zero, c);
-branch_inst!(bmi, get_minus, s);
-branch_inst!(bpl, get_minus, c);
-branch_inst!(bvc, get_overflow, c);
-branch_inst!(bvs, get_overflow, s);
+branch_inst!(bcc, |s: &State| !s.get_carry());
+branch_inst!(bcs, |s: &State| s.get_carry());
+branch_inst!(beq, |s: &State| s.get_zero());
+branch_inst!(bne, |s: &State| !s.get_zero());
+branch_inst!(bmi, |s: &State| s.get_negative());
+branch_inst!(bpl, |s: &State| !s.get_negative());
+
+branch_inst!(bvc, |s: &State| !s.get_overflow());
+branch_inst!(bvs, |s: &State| s.get_overflow());
+
+// TODO BIT instruction
+// TODO BRK instruction
 
 #[cfg(test)]
 mod tests {

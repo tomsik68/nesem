@@ -1,5 +1,3 @@
-#![feature(concat_idents)]
-
 mod instruction;
 mod interp;
 
