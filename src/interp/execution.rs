@@ -41,7 +41,15 @@ branch_inst!(bpl, |s: &State| !s.get_negative());
 branch_inst!(bvc, |s: &State| !s.get_overflow());
 branch_inst!(bvs, |s: &State| s.get_overflow());
 
-// TODO BIT instruction
+fn bit(state: &mut State, op: &Operand) {
+    let a = state.accumulator;
+    let v = operand_decoder::get_u8(op, state).expect("bit: operand with value is required");
+
+    let r = a & v;
+    state.set_negative(r & (1 << 7) > 0);
+    state.set_overflow(r & (1 << 6) > 0);
+}
+
 // TODO BRK instruction
 
 #[cfg(test)]
@@ -70,6 +78,72 @@ mod tests {
             bcc(&mut state, &op);
 
             assert_eq!(state.pc, 100);
+        }
+    }
+
+    mod bit {
+        use crate::instruction::operand::Operand;
+        use crate::interp::execution::bit;
+        use crate::interp::state::State;
+
+        #[test]
+        fn test_bit_zeros() {
+            let mut state = State::new_undefined();
+            state.accumulator = 0;
+            state.set_negative(true);
+            state.set_overflow(true);
+
+            let op = Operand::Immediate(0xFF);
+            bit(&mut state, &op);
+
+            assert!(!state.get_overflow());
+            assert!(!state.get_negative());
+        }
+
+        #[test]
+        fn test_bit_ones() {
+            let mut state = State::new_undefined();
+            state.accumulator = 0xFF;
+            state.set_negative(false);
+            state.set_overflow(false);
+
+            let op = Operand::Immediate(0xFF);
+            bit(&mut state, &op);
+
+            assert!(state.get_overflow());
+            assert!(state.get_negative());
+        }
+
+        #[test]
+        fn test_bit_mixed_7() {
+            let mut state = State::new_undefined();
+
+            state.accumulator = 0b1000_0000;
+
+            state.set_negative(false);
+            state.set_overflow(true);
+
+            let op = Operand::Immediate(0xFF);
+            bit(&mut state, &op);
+
+            assert!(!state.get_overflow());
+            assert!(state.get_negative());
+        }
+
+        #[test]
+        fn test_bit_mixed_6() {
+            let mut state = State::new_undefined();
+
+            state.accumulator = 0b0100_0000;
+
+            state.set_negative(true);
+            state.set_overflow(false);
+
+            let op = Operand::Immediate(0xFF);
+            bit(&mut state, &op);
+
+            assert!(state.get_overflow());
+            assert!(!state.get_negative());
         }
     }
 }
