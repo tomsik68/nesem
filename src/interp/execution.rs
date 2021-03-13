@@ -14,8 +14,6 @@ fn lda(state: &mut State, op: &Operand) {
 }
 
 /// Create a function @name which checks the flag @flag.
-/// For the 's' variant: branch happens if @flag is set
-/// For the 'c' variant: branch happens if @flag is clear
 macro_rules! branch_inst {
     ($name:ident, $pred:expr) => {
         fn $name(state: &mut State, op: &Operand) {
