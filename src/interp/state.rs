@@ -4,11 +4,13 @@ pub struct State {
     pub pc: u16,
     /// Stack pointer
     /// 8-bit offset to the stack page
+    // TODO should be initialized to 0xFF as stack starts at STACK_OFFSET + 0xFF,
+    // decremented with push
     sp: u8,
     /// Status word
     /// Starting from 8th bit: `NV1BDIZC`
     /// for Ricoh CPU in the NES, there is no need to support D
-    psw: u8,
+    pub psw: u8,
     pub accumulator: u8,
     /// Indexing register
     pub x: u8,
@@ -31,6 +33,8 @@ const PSW_BREAK_BIT: u8 = 1 << 4;
 const PSW_ONE_BIT: u8 = 1 << 5;
 const PSW_OVERFLOW_BIT: u8 = 1 << 6;
 const PSW_NEGATIVE_BIT: u8 = 1 << 7;
+
+const STACK_OFFSET: u16 = 0x100;
 
 /// generate getter and setter for a given psw bit in state
 macro_rules! psw_getset {
@@ -72,6 +76,22 @@ impl State {
 
     pub fn ram_set(&mut self, addr: u16, value: u8) {
         self.ram[addr as usize] = value;
+    }
+
+    /// return stack pointer
+    /// the address where to store newly-pushed element of stack
+    fn get_sp(&self) -> u16 {
+        STACK_OFFSET + self.pc
+    }
+
+    pub fn stack_push(&mut self, val: u8) {
+        self.ram_set(self.get_sp(), val);
+        self.sp = self.sp.wrapping_sub(1);
+    }
+
+    pub fn stack_pop(&mut self) -> u8 {
+        self.sp = self.sp.wrapping_add(1);
+        self.ram_get(self.get_sp())
     }
 
     psw_getset!(get_carry, set_carry, PSW_CARRY_BIT);

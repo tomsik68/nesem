@@ -1,4 +1,5 @@
 use super::operand_decoder;
+use super::operand_decoder::{get_pointer, get_u8};
 use crate::instruction::operand::Operand;
 use crate::interp::state::State;
 
@@ -48,7 +49,76 @@ fn bit(state: &mut State, op: &Operand) {
     state.set_overflow(r & (1 << 6) > 0);
 }
 
-// TODO BRK instruction
+// TODO test this after MMU is done
+// since interrupt vector at 0xFFFE is outside ram, it doesn't work without MMU
+fn brk(state: &mut State, op: &Operand) {
+    match op {
+        Operand::Implicit => {}
+        _ => panic!("brk: there must be no operand!"),
+    };
+
+    // push lower bits then higher bits
+    // TODO the stack order
+    state.stack_push(state.pc as u8);
+    state.stack_push((state.pc >> 8) as u8);
+    state.stack_push(state.psw);
+    state.set_break(true);
+    state.pc = get_pointer(&Operand::Indirect(0xFFFE), &state).unwrap();
+}
+
+fn rti(state: &mut State, op: &Operand) {
+    match op {
+        Operand::Implicit => {}
+        _ => panic!("brk: there must be no operand!"),
+    };
+
+    // TODO the stack order
+    // pop psw
+    state.psw = state.stack_pop();
+    // pop pc
+    state.pc = 0;
+    state.pc = ((state.stack_pop() as u16) << 8);
+    state.pc |= state.stack_pop() as u16;
+}
+
+macro_rules! flag {
+    ($clear:ident, $setter:ident) => {
+        fn $clear(state: &mut State, op: &Operand) {
+            state.$setter(false);
+        }
+    };
+
+    ($clear:ident, $set:ident, $setter:ident) => {
+        fn $clear(state: &mut State, op: &Operand) {
+            state.$setter(false);
+        }
+
+        fn $set(state: &mut State, op: &Operand) {
+            state.$setter(true);
+        }
+    };
+}
+
+flag!(clc, sec, set_carry);
+flag!(cli, sei, set_interrupt);
+flag!(clv, set_interrupt);
+
+macro_rules! compare {
+    ($instr:ident, $get_value:expr) => {
+        fn $instr(state: &mut State, op: &Operand) {
+            let value = get_u8(&state).expect("{}: operand is required", stringify!($instr));
+
+            let result = $get_value(&mut state) - value;
+            state.set_carry(result >= 0);
+            state.set_zero(result == 0);
+            state.set_negative(is_negative(result));
+        }
+    };
+}
+
+compare!(cmp, |s: &mut State| s.accumulator);
+compare!(cpx, |s: &mut State| s.x);
+compare!(cpy, |s: &mut State| s.y);
 
 #[cfg(test)]
 mod tests {
@@ -144,6 +214,26 @@ mod tests {
             assert!(!state.get_negative());
         }
     }
+
+    // mod brk {
+    //     use crate::instruction::operand::Operand;
+    //     use crate::interp::execution::brk;
+    //     use crate::interp::state::State;
+
+    //     #[test]
+    //     fn brk_test() {
+    //         let mut state = State::new_undefined();
+    //         state.set_break(false);
+    //         state.set_overflow(true);
+    //         state.set_negative(true);
+    //         state.set_carry(true);
+
+    //         let op = Operand::Implicit;
+    //         brk(&mut state, &op);
+
+    //         assert!(state.get_break());
+    //     }
+    // }
 }
 
 pub use super::alu::adc;

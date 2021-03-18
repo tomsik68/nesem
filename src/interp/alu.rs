@@ -74,6 +74,60 @@ pub fn asl(state: &mut State, op: &Operand) {
     state.set_negative(is_negative(value));
 }
 
+fn dec(state: &mut State, op: &Operand) {
+    let m = get_pointer(&op, &state).expect("dec: operand must be a pointer");
+    let r = state.ram_get(m).wrapping_sub(1);
+    state.ram_set(m, r);
+    state.set_zero(r == 0);
+    state.set_negative(is_negative(r));
+}
+
+fn dex(state: &mut State, op: &Operand) {
+    let r = state.x.wrapping_sub(1);
+    state.x = r;
+    state.set_zero(r == 0);
+    state.set_negative(is_negative(r));
+}
+
+fn dey(state: &mut State, op: &Operand) {
+    let r = state.y.wrapping_sub(1);
+    state.y = r;
+    state.set_zero(r == 0);
+    state.set_negative(is_negative(r));
+}
+
+fn eor(state: &mut State, op: &Operand) {
+    let r = state.accumulator ^ get_u8(&op, &state);
+    state.set_zero(r == 0);
+    state.set_negative(is_negative(r));
+}
+
+fn inc(state: &mut State, op: &Operand) {
+    let p = get_pointer(&op, &state).expect("inc: operand must be a pointer");
+    let r = state.ram_get(p).wrapping_add(1);
+    state.set_zero(r == 0);
+    state.set_negative(is_negative(r));
+}
+
+fn inx(state: &mut State, op: &Operand) {
+    let r = state.x.wrapping_add(1);
+    state.x = r;
+    state.set_zero(r == 0);
+    state.set_negative(is_negative(r));
+}
+
+fn iny(state: &mut State, op: &Operand) {
+    let r = state.y.wrapping_add(1);
+    state.y = r;
+    state.set_zero(r == 0);
+    state.set_negative(is_negative(r));
+}
+
+fn jmp(state: &mut State, op: &Operand) {
+    // TODO i stop here
+    let d = get_value(&op, &state).expect();
+}
+
 #[cfg(test)]
 mod tests {
 
