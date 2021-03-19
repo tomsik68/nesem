@@ -1,4 +1,4 @@
-use super::operand_decoder::{get_pointer, get_u8, get_value};
+use super::operand_decoder::{get_pointer, get_u8, get_value, set_u8};
 use super::state::State;
 use crate::instruction::operand::Operand;
 
@@ -11,7 +11,7 @@ fn is_positive(a: u8) -> bool {
 
 /// Interpret @a as an 8-bit twos complement integer.
 /// Return true iff @a < 0
-fn is_negative(a: u8) -> bool {
+pub fn is_negative(a: u8) -> bool {
     !is_positive(a)
 }
 
@@ -97,7 +97,7 @@ fn dey(state: &mut State, op: &Operand) {
 }
 
 fn eor(state: &mut State, op: &Operand) {
-    let r = state.accumulator ^ get_u8(&op, &state);
+    let r = state.accumulator ^ get_u8(&op, &state).expect("eor: operand is required");
     state.set_zero(r == 0);
     state.set_negative(is_negative(r));
 }
@@ -123,9 +123,65 @@ fn iny(state: &mut State, op: &Operand) {
     state.set_negative(is_negative(r));
 }
 
-fn jmp(state: &mut State, op: &Operand) {
-    // TODO i stop here
-    let d = get_value(&op, &state).expect();
+macro_rules! compare {
+    ($instr:ident, $get_value:expr) => {
+        fn $instr(state: &mut State, op: &Operand) {
+            let value = get_u8(&op, &state).expect("cmp: operand is required");
+
+            let result = $get_value(state) - value;
+            state.set_carry(result >= 0);
+            state.set_zero(result == 0);
+            state.set_negative(is_negative(result));
+        }
+    };
+}
+
+compare!(cmp, |s: &mut State| s.accumulator);
+compare!(cpx, |s: &mut State| s.x);
+compare!(cpy, |s: &mut State| s.y);
+
+fn lsr(state: &mut State, op: &Operand) {
+    let v = get_u8(&op, &state).expect("lsr: operand is required");
+    state.set_carry(v & 0x1 > 0);
+    let v = v >> 1;
+
+    state.set_zero(v == 0);
+    state.set_negative(is_negative(v));
+
+    set_u8(&op, v, state);
+}
+
+fn ora(state: &mut State, op: &Operand) {
+    let value = get_u8(&op, &state).expect("ora: operand is required");
+    state.accumulator = state.accumulator | value;
+    state.set_zero(state.accumulator == 0);
+    state.set_negative(is_negative(state.accumulator));
+}
+
+fn rol(state: &mut State, op: &Operand) {
+    let value = get_u8(&op, &state).expect("rol: operand is required");
+    let lsb = match state.get_carry() {
+        true => 1,
+        false => 0,
+    };
+
+    state.set_carry(is_negative(value));
+    let value = value << 1 | lsb;
+}
+
+fn ror(state: &mut State, op: &Operand) {
+    let value = get_u8(&op, &state).expect("ror: operand is required");
+    let msb = match state.get_carry() {
+        true => 1 << 7,
+        false => 0,
+    };
+
+    state.set_carry(is_negative(value));
+    let value = value >> 1 | msb;
+}
+
+fn sbc(state: &mut State, op: &Operand) {
+    let v = state.accumulator - get_value
 }
 
 #[cfg(test)]
@@ -271,5 +327,6 @@ mod tests {
             assert!(st.get_carry());
             assert!(st.get_carry());
         }
+
     }
 }

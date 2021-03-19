@@ -94,6 +94,17 @@ impl State {
         self.ram_get(self.get_sp())
     }
 
+    pub fn push_pc(&mut self) {
+        self.stack_push(self.pc as u8);
+        self.stack_push((self.pc >> 8) as u8);
+    }
+
+    pub fn pop_pc(&mut self) {
+        self.pc = 0;
+        self.pc = ((self.stack_pop() as u16) << 8);
+        self.pc |= self.stack_pop() as u16;
+    }
+
     psw_getset!(get_carry, set_carry, PSW_CARRY_BIT);
     psw_getset!(get_zero, set_zero, PSW_ZERO_BIT);
     psw_getset!(get_interrupt, set_interrupt, PSW_INTERRUPT_BIT);

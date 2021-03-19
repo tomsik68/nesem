@@ -1,18 +1,8 @@
+use super::alu::is_negative;
 use super::operand_decoder;
 use super::operand_decoder::{get_pointer, get_u8};
 use crate::instruction::operand::Operand;
 use crate::interp::state::State;
-
-fn lda(state: &mut State, op: &Operand) {
-    let value = match op {
-        Operand::Immediate(x) => *x,
-        Operand::Accumulator => state.accumulator,
-        Operand::Implicit => panic!("lda with implicit operand impossible!"),
-        _ => unimplemented!("nyi"),
-    };
-
-    state.accumulator = value;
-}
 
 /// Create a function @name which checks the flag @flag.
 macro_rules! branch_inst {
@@ -59,8 +49,7 @@ fn brk(state: &mut State, op: &Operand) {
 
     // push lower bits then higher bits
     // TODO the stack order
-    state.stack_push(state.pc as u8);
-    state.stack_push((state.pc >> 8) as u8);
+    state.push_pc();
     state.stack_push(state.psw);
     state.set_break(true);
     state.pc = get_pointer(&Operand::Indirect(0xFFFE), &state).unwrap();
@@ -76,9 +65,7 @@ fn rti(state: &mut State, op: &Operand) {
     // pop psw
     state.psw = state.stack_pop();
     // pop pc
-    state.pc = 0;
-    state.pc = ((state.stack_pop() as u16) << 8);
-    state.pc |= state.stack_pop() as u16;
+    state.pop_pc();
 }
 
 macro_rules! flag {
@@ -103,22 +90,56 @@ flag!(clc, sec, set_carry);
 flag!(cli, sei, set_interrupt);
 flag!(clv, set_interrupt);
 
-macro_rules! compare {
-    ($instr:ident, $get_value:expr) => {
-        fn $instr(state: &mut State, op: &Operand) {
-            let value = get_u8(&state).expect("{}: operand is required", stringify!($instr));
+fn jmp(state: &mut State, op: &Operand) {
+    let d = get_pointer(&op, &state).expect("jmp: operand is required");
+    state.pc = d;
+}
 
-            let result = $get_value(&mut state) - value;
-            state.set_carry(result >= 0);
-            state.set_zero(result == 0);
-            state.set_negative(is_negative(result));
+fn jsr(state: &mut State, op: &Operand) {
+    let d = get_pointer(&op, &state).expect("jsr: operand is required");
+    state.push_pc();
+    state.pc = d;
+}
+
+macro_rules! load {
+    ($inst:ident, $dst:ident) => {
+        fn $inst(state: &mut State, op: &Operand) {
+            let v = get_u8(&op, &state).expect("lda: operand is required");
+            state.$dst = v;
+            state.set_zero(v == 0);
+            state.set_negative(is_negative(v));
         }
     };
 }
 
-compare!(cmp, |s: &mut State| s.accumulator);
-compare!(cpx, |s: &mut State| s.x);
-compare!(cpy, |s: &mut State| s.y);
+load!(lda, accumulator);
+load!(ldx, x);
+load!(ldy, y);
+
+fn nop(_state: &mut State, _op: &Operand) {}
+
+fn pha(state: &mut State, _op: &Operand) {
+    state.stack_push(state.accumulator);
+}
+
+fn php(state: &mut State, _op: &Operand) {
+    state.stack_push(state.psw);
+}
+
+fn pla(state: &mut State, _op: &Operand) {
+    state.accumulator = state.stack_pop();
+    state.set_zero(state.accumulator == 0);
+    state.set_negative(is_negative(state.accumulator));
+}
+
+fn plp(state: &mut State, _op: &Operand) {
+    state.psw = state.stack_pop();
+}
+
+fn rts(state: &mut State, op: &Operand) {
+    // complement of jsr
+    state.pop_pc();
+}
 
 #[cfg(test)]
 mod tests {

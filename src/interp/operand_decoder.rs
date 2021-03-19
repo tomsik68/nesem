@@ -76,6 +76,26 @@ pub fn get_u8(op: &Operand, state: &State) -> Option<u8> {
     }
 }
 
+// TODO revisit the result type
+// the only error here could be that the operand is not writable (i.e. implicit or immediate)
+pub fn set_u8(op: &Operand, val: u8, state: &mut State) -> Result<(), ()> {
+    let ptr = get_pointer(op, state);
+
+    match ptr {
+        Some(p) => {
+            state.ram_set(p, val);
+            Ok(())
+        }
+        None => match op {
+            Operand::Accumulator => {
+                state.accumulator = val;
+                Ok(())
+            }
+            _ => Err(()),
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{get_pointer, Operand, State};
