@@ -32,7 +32,9 @@ fn is_add_overflow(a: u8, b: u8) -> bool {
 pub fn adc(state: &mut State, op: &Operand) {
     let value = get_value(&op, &state).unwrap() as u8;
 
+    let prev_carry = if state.get_carry() { 1 } else { 0 };
     let (new, carry) = state.accumulator.overflowing_add(value);
+    let new = new + prev_carry;
     let overflow = is_add_overflow(value, state.accumulator);
     state.accumulator = new;
     state.set_carry(carry);
@@ -181,7 +183,7 @@ fn ror(state: &mut State, op: &Operand) {
 }
 
 fn sbc(state: &mut State, op: &Operand) {
-    let v = state.accumulator - get_value
+    let v = state.accumulator - get_u8(&op, &state).expect("sbc: operand is required");
 }
 
 #[cfg(test)]
@@ -325,8 +327,40 @@ mod tests {
             adc(&mut st, &op);
             assert_eq!(0, st.accumulator);
             assert!(st.get_carry());
+            assert!(st.get_zero());
+        }
+
+        #[test]
+        fn adc_carry_test() {
+            let mut st = State::new_undefined();
+            st.accumulator = 50;
+            st.set_carry(true);
+            let op = Operand::Immediate(2);
+            adc(&mut st, &op);
+            assert_eq!(53, st.accumulator);
+            assert!(!st.get_carry());
+        }
+
+        #[test]
+        fn adc_carry_limit_test() {
+            let mut st = State::new_undefined();
+            st.accumulator = 0xFF;
+            st.set_carry(true);
+            let op = Operand::Immediate(0xFF);
+            adc(&mut st, &op);
+            assert_eq!(0xFF, st.accumulator);
             assert!(st.get_carry());
         }
 
+        #[test]
+        fn adc_no_carry_limit_test() {
+            let mut st = State::new_undefined();
+            st.accumulator = 0xFF;
+            st.set_carry(false);
+            let op = Operand::Immediate(0xFF);
+            adc(&mut st, &op);
+            assert_eq!(0xFE, st.accumulator);
+            assert!(st.get_carry());
+        }
     }
 }
