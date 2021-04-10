@@ -142,10 +142,10 @@ fn iny(state: &mut State, op: &Operand) {
 macro_rules! compare {
     ($instr:ident, $get_value:expr) => {
         fn $instr(state: &mut State, op: &Operand) {
-            let value = get_u8(&op, &state).expect("cmp: operand is required");
-
-            let result = $get_value(state) - value;
-            state.set_carry(result >= 0);
+            let m = get_u8(&op, &state).expect("cmp: operand is required");
+            let a = $get_value(state);
+            let result = a - m;
+            state.set_carry(a >= m);
             state.set_zero(result == 0);
             state.set_negative(is_negative(result));
         }
