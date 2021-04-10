@@ -18,14 +18,28 @@ pub fn is_negative(a: u8) -> bool {
 /// Return true iff adding @a + @b causes the oVerflow flag to be set to 1
 /// This happens when @a + @b > 127 or @a + @b < -128
 /// @a and @b are signed twos complement integers represented by u8
-fn is_add_overflow(a: u8, b: u8) -> bool {
+fn is_add_overflow(a: u8, b: u8, carry: bool) -> bool {
     // adding positive and negative number decreases abs. value => no problems
     if is_positive(a) != is_positive(b) {
         return false;
     }
 
-    let pos = is_positive(a);
-    let n = a.wrapping_add(b);
+    let c = if carry { 1 } else { 0 };
+    let n = a.wrapping_add(b).wrapping_add(c);
+    is_positive(a) != is_positive(n)
+}
+
+/// Return true iff subtracting @a - @b causes the oVerflow flag to be set to 1
+/// This happens when @a - @b > 127 or @a - @b < -128
+/// @a and @b are signed twos complement integers represented by u8
+fn is_sub_overflow(a: u8, b: u8, carry: bool) -> bool {
+    // subtracting positive and negative number decreases abs. value => no problems
+    if is_positive(a) == is_positive(b) {
+        return false;
+    }
+
+    let c = if carry { 0 } else { 1 };
+    let n = a.wrapping_sub(b).wrapping_sub(c);
     is_positive(a) != is_positive(n)
 }
 
@@ -35,10 +49,10 @@ pub fn adc(state: &mut State, op: &Operand) {
     let prev_carry = if state.get_carry() { 1 } else { 0 };
     let (new, carry) = state.accumulator.overflowing_add(value);
     let new = new + prev_carry;
-    let overflow = is_add_overflow(value, state.accumulator);
+    let overflow = is_add_overflow(value, state.accumulator, state.get_carry());
     state.accumulator = new;
     state.set_carry(carry);
-    state.set_overflow(carry);
+    state.set_overflow(overflow);
     state.set_negative(new & 0b10000000 > 0);
     state.set_zero(new == 0);
 }
@@ -183,7 +197,18 @@ fn ror(state: &mut State, op: &Operand) {
 }
 
 fn sbc(state: &mut State, op: &Operand) {
-    let v = state.accumulator - get_u8(&op, &state).expect("sbc: operand is required");
+    let a = state.accumulator;
+    let b = get_u8(&op, &state).expect("sbc: operand is required");
+    let c = if state.get_carry() { 1 } else { 0 };
+    let (new, carry) = a.overflowing_sub(b);
+    let overflow = is_sub_overflow(a, b, state.get_carry());
+    let new = new - (1 - c);
+
+    state.accumulator = new;
+    state.set_zero(state.accumulator == 0);
+    state.set_carry(!carry);
+    state.set_overflow(overflow);
+    state.set_negative(is_negative(new));
 }
 
 #[cfg(test)]
@@ -272,25 +297,25 @@ mod tests {
 
         #[test]
         fn is_overflow_test_positive() {
-            assert!(!is_add_overflow(0, 0));
-            assert!(!is_add_overflow(17, 61));
-            assert!(!is_add_overflow(64, 63));
-            assert!(is_add_overflow(64, 64));
-            assert!(is_add_overflow(0x7F, 0x7F));
+            assert!(!is_add_overflow(0, 0, false));
+            assert!(!is_add_overflow(17, 61, false));
+            assert!(!is_add_overflow(64, 63, false));
+            assert!(is_add_overflow(64, 64, false));
+            assert!(is_add_overflow(0x7F, 0x7F, false));
         }
 
         #[test]
         fn is_overflow_test_negative() {
-            assert!(!is_add_overflow(1, 0xFF));
-            assert!(!is_add_overflow(2, 0xFE));
+            assert!(!is_add_overflow(1, 0xFF, false));
+            assert!(!is_add_overflow(2, 0xFE, false));
             // 0xFF == -1
-            assert!(!is_add_overflow(0xFF, 0xFE));
+            assert!(!is_add_overflow(0xFF, 0xFE, false));
             // 0xC0 == -64
-            assert!(!is_add_overflow(0xC0, 0xC0));
-            assert!(is_add_overflow(0xBF, 0xC0));
+            assert!(!is_add_overflow(0xC0, 0xC0, false));
+            assert!(is_add_overflow(0xBF, 0xC0, false));
             // 0x80 == -128
-            assert!(is_add_overflow(0x80, 0xFF));
-            assert!(is_add_overflow(0x80, 0x80));
+            assert!(is_add_overflow(0x80, 0xFF, false));
+            assert!(is_add_overflow(0x80, 0x80, false));
         }
     }
 
@@ -298,6 +323,7 @@ mod tests {
         use super::super::adc;
         use crate::instruction::operand::Operand;
         use crate::interp::state::State;
+
         #[test]
         #[should_panic]
         fn adc_implicit_test() {
@@ -360,6 +386,73 @@ mod tests {
             let op = Operand::Immediate(0xFF);
             adc(&mut st, &op);
             assert_eq!(0xFE, st.accumulator);
+            assert!(st.get_carry());
+        }
+
+        #[test]
+        fn adc_carry_overflow_test() {
+            let mut st = State::new_undefined();
+            st.accumulator = 0x7E;
+            st.set_carry(true);
+            let op = Operand::Immediate(0x01);
+            adc(&mut st, &op);
+            assert_eq!(0x80, st.accumulator);
+            assert!(st.get_overflow());
+        }
+    }
+
+    mod sbc {
+
+        use super::super::sbc;
+        use crate::instruction::operand::Operand;
+        use crate::interp::state::State;
+
+        #[test]
+        fn sbc_basic_test() {
+            let mut st = State::new_undefined();
+            st.accumulator = 0x03;
+            st.set_carry(true);
+            let op = Operand::Immediate(0x01);
+            sbc(&mut st, &op);
+            assert_eq!(0x2, st.accumulator);
+            assert!(st.get_carry());
+            assert!(!st.get_overflow());
+        }
+
+        #[test]
+        fn sbc_zero_test() {
+            let mut st = State::new_undefined();
+            st.accumulator = 0x1;
+            st.set_carry(true);
+            let op = Operand::Immediate(0x01);
+            sbc(&mut st, &op);
+            assert_eq!(0x0, st.accumulator);
+            assert!(st.get_carry());
+            assert!(!st.get_overflow());
+        }
+
+        #[test]
+        fn sbc_carry_test() {
+            let mut st = State::new_undefined();
+            st.accumulator = 0x1;
+            st.set_carry(true);
+            let op = Operand::Immediate(0x02);
+            sbc(&mut st, &op);
+            assert_eq!(0xFF, st.accumulator);
+            assert!(!st.get_carry());
+            assert!(!st.get_overflow());
+        }
+
+        #[test]
+        fn sbc_overflow_test() {
+            let mut st = State::new_undefined();
+            st.accumulator = 0x80; // -128
+            st.set_overflow(false);
+            st.set_carry(true);
+            let op = Operand::Immediate(0x01);
+            sbc(&mut st, &op);
+            assert_eq!(0x7F, st.accumulator);
+            assert!(st.get_overflow());
             assert!(st.get_carry());
         }
     }
