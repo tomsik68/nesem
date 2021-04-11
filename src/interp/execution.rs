@@ -1,6 +1,6 @@
 use super::alu::is_negative;
 use super::operand_decoder;
-use super::operand_decoder::{get_pointer, get_u8};
+use super::operand_decoder::{get_pointer, get_u8, set_u8};
 use crate::instruction::operand::Operand;
 use crate::interp::state::State;
 
@@ -115,6 +115,35 @@ macro_rules! load {
 load!(lda, accumulator);
 load!(ldx, x);
 load!(ldy, y);
+
+macro_rules! store {
+    ($inst:ident, $src:expr) => {
+        fn $inst(state: &mut State, op: &Operand) {
+            set_u8(op, $src(&state), state).expect("sta: read-only operand");
+        }
+    };
+}
+
+store!(sta, |s: &State| s.accumulator);
+store!(stx, |s: &State| s.x);
+store!(sty, |s: &State| s.y);
+
+macro_rules! transfer {
+    ($inst:ident, $src:ident, $dst:ident) => {
+        fn $inst(state: &mut State, _op: &Operand) {
+            state.$dst = state.$src;
+            state.set_zero(state.$dst == 0);
+            state.set_negative(is_negative(state.$dst));
+        }
+    };
+}
+
+transfer!(tax, accumulator, x);
+transfer!(tay, accumulator, y);
+transfer!(tsx, sp, x);
+transfer!(txs, x, sp);
+transfer!(txa, x, accumulator);
+transfer!(tya, y, accumulator);
 
 fn nop(_state: &mut State, _op: &Operand) {}
 

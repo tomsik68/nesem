@@ -6,7 +6,7 @@ pub struct State {
     /// 8-bit offset to the stack page
     // TODO should be initialized to 0xFF as stack starts at STACK_OFFSET + 0xFF,
     // decremented with push
-    sp: u8,
+    pub sp: u8,
     /// Status word
     /// Starting from 8th bit: `NV1BDIZC`
     /// for Ricoh CPU in the NES, there is no need to support D
