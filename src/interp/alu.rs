@@ -65,26 +65,11 @@ pub fn and(state: &mut State, op: &Operand) {
 }
 
 pub fn asl(state: &mut State, op: &Operand) {
-    use crate::instruction::operand::Operand::Accumulator;
-
-    let ptr = get_pointer(&op, &state);
     let value = get_u8(&op, &state).unwrap();
 
     state.set_carry(is_negative(value));
     let value = value << 1;
-
-    match ptr {
-        None => {
-            if let Accumulator = op {
-                state.accumulator = value;
-            } else {
-                panic!("alu: asl: operand does not have an associated pointer and is not in an accumulator!");
-            }
-        }
-        Some(p) => {
-            state.ram_set(p, value);
-        }
-    }
+    set_u8(op, value, state).expect("asl: read-only operand");
 
     state.set_zero(state.accumulator == 0);
     state.set_negative(is_negative(value));
@@ -164,7 +149,7 @@ fn lsr(state: &mut State, op: &Operand) {
     state.set_zero(v == 0);
     state.set_negative(is_negative(v));
 
-    set_u8(&op, v, state);
+    set_u8(&op, v, state).expect("lsr: read-only operand");
 }
 
 fn ora(state: &mut State, op: &Operand) {
@@ -183,6 +168,7 @@ fn rol(state: &mut State, op: &Operand) {
 
     state.set_carry(is_negative(value));
     let value = value << 1 | lsb;
+    set_u8(op, value, state).expect("rol: read-only operand");
 }
 
 fn ror(state: &mut State, op: &Operand) {
@@ -194,6 +180,7 @@ fn ror(state: &mut State, op: &Operand) {
 
     state.set_carry(is_negative(value));
     let value = value >> 1 | msb;
+    set_u8(op, value, state).expect("ror: read-only operand");
 }
 
 fn sbc(state: &mut State, op: &Operand) {
@@ -454,6 +441,18 @@ mod tests {
             assert_eq!(0x7F, st.accumulator);
             assert!(st.get_overflow());
             assert!(st.get_carry());
+        }
+
+        #[test]
+        fn sbc_negative_result_test() {
+            let mut st = State::new_undefined();
+            st.accumulator = 0x00;
+            st.set_overflow(false);
+            st.set_carry(true);
+            let op = Operand::Immediate(0x01);
+            sbc(&mut st, &op);
+            assert_eq!(st.accumulator, 0xFF);
+            assert!(!st.get_carry());
         }
     }
 }
